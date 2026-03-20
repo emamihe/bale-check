@@ -10,3 +10,7 @@ request_timeout: "15s"
 concurrent_workers: 50
 check_interval: "1h"
 https_port: ":443"
+forward_proxy_enabled: false
+forward_proxy_port: ":13680"
+upstream_proxy_url: "http://user:pass@p.webshare.io:80"  # or leave empty to use proxy config above
+upstream_proxy_insecure: false  # skip TLS verify when connecting to https:// upstream

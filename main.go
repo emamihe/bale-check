@@ -1,15 +1,20 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"fmt"
+	"io"
 	"log"
 	"math/big"
+	"net"
 	"net/http"
 	"net/url"
 	"sync"
@@ -55,6 +60,7 @@ var countryCodes = []string{
 
 func main() {
 	var configPath string
+	var forwardProxy bool
 
 	rootCmd := &cobra.Command{
 		Use:   "bale-check",
@@ -63,11 +69,15 @@ func main() {
 			if _, err := LoadConfig(configPath); err != nil {
 				return err
 			}
+			if cmd.Flags().Changed("forward-proxy") {
+				GetConfig().ForwardProxyEnabled = forwardProxy
+			}
 			return runApp()
 		},
 	}
 
 	rootCmd.Flags().StringVarP(&configPath, "config", "c", "", "path to config file (required)")
+	rootCmd.Flags().BoolVar(&forwardProxy, "forward-proxy", false, "enable HTTP forward proxy (upstream_proxy_url, upstream_proxy_insecure from config)")
 	rootCmd.MarkFlagRequired("config")
 
 	if err := rootCmd.Execute(); err != nil {
@@ -99,6 +109,31 @@ func runApp() error {
 		Addr:      c.HTTPSPort,
 		Handler:   router,
 		TLSConfig: generateTLSConfig(),
+	}
+
+	if c.ForwardProxyEnabled {
+		if c.UpstreamProxyURL == "" {
+			return fmt.Errorf("forward proxy enabled but no upstream proxy configured (set upstream_proxy_url in config)")
+		}
+		proxyHandler := newForwardProxyHandler(c.UpstreamProxyURL, p.RequestTimeout, c.UpstreamProxyInsecure)
+		proxyServer := &http.Server{
+			Addr: c.ForwardProxyPort,
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodConnect {
+					proxyHandler.handleTunneling(w, r)
+				} else {
+					http.Error(w, "Only CONNECT method supported", http.StatusMethodNotAllowed)
+				}
+			}),
+			// Disable HTTP/2 for CONNECT hijacking
+			TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
+		}
+		log.Printf("HTTP forward proxy listening on %s (upstream: %s)\n", c.ForwardProxyPort, maskProxyURL(c.UpstreamProxyURL))
+		go func() {
+			if err := proxyServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("Forward proxy error: %v\n", err)
+			}
+		}()
 	}
 
 	log.Printf("HTTPS server listening on %s\n", c.HTTPSPort)
@@ -277,4 +312,131 @@ func isTimeout(err error) bool {
 	}
 	return err.Error() == "context deadline exceeded" ||
 		err.Error() == "net/http: request canceled (Client.Timeout exceeded)"
+}
+
+// forwardProxyHandler handles CONNECT requests and tunnels via upstream HTTP proxy.
+type forwardProxyHandler struct {
+	upstreamProxyURL      string
+	timeout               time.Duration
+	upstreamProxyInsecure bool
+}
+
+func newForwardProxyHandler(upstreamProxyURL string, timeout time.Duration, insecure bool) *forwardProxyHandler {
+	return &forwardProxyHandler{
+		upstreamProxyURL:      upstreamProxyURL,
+		timeout:               timeout,
+		upstreamProxyInsecure: insecure,
+	}
+}
+
+func (h *forwardProxyHandler) handleTunneling(w http.ResponseWriter, r *http.Request) {
+	destConn, err := h.dialViaUpstream(r.Host)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	defer destConn.Close()
+
+	hijacker, ok := w.(http.Hijacker)
+	if !ok {
+		http.Error(w, "Hijacking not supported", http.StatusInternalServerError)
+		return
+	}
+	clientConn, _, err := hijacker.Hijack()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	defer clientConn.Close()
+
+	// Send 200 Connection established to client
+	_, _ = clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
+
+	go transfer(destConn, clientConn)
+	transfer(clientConn, destConn)
+}
+
+func (h *forwardProxyHandler) dialViaUpstream(target string) (net.Conn, error) {
+	upstreamURL, err := url.Parse(h.upstreamProxyURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid upstream proxy URL: %w", err)
+	}
+
+	proxyHost := upstreamURL.Host
+	if upstreamURL.Port() == "" {
+		if upstreamURL.Scheme == "https" {
+			proxyHost = net.JoinHostPort(upstreamURL.Hostname(), "443")
+		} else {
+			proxyHost = net.JoinHostPort(upstreamURL.Hostname(), "80")
+		}
+	}
+
+	var conn net.Conn
+	if upstreamURL.Scheme == "https" {
+		tlsCfg := &tls.Config{InsecureSkipVerify: h.upstreamProxyInsecure}
+		conn, err = tls.DialWithDialer(&net.Dialer{Timeout: h.timeout}, "tcp", proxyHost, tlsCfg)
+	} else {
+		conn, err = net.DialTimeout("tcp", proxyHost, h.timeout)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("dial upstream proxy: %w", err)
+	}
+
+	connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n", target, target)
+	if upstreamURL.User != nil {
+		pass, _ := upstreamURL.User.Password()
+		auth := base64.StdEncoding.EncodeToString([]byte(upstreamURL.User.Username() + ":" + pass))
+		connectReq += fmt.Sprintf("Proxy-Authorization: Basic %s\r\n", auth)
+	}
+	connectReq += "\r\n"
+
+	if _, err := conn.Write([]byte(connectReq)); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("write CONNECT to upstream: %w", err)
+	}
+
+	br := bufio.NewReader(conn)
+	resp, err := http.ReadResponse(br, nil)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("read upstream response: %w", err)
+	}
+	if resp.StatusCode != 200 {
+		conn.Close()
+		return nil, fmt.Errorf("upstream proxy returned %d", resp.StatusCode)
+	}
+
+	// Connection established; any buffered data (e.g. TLS handshake) must be forwarded
+	if n := br.Buffered(); n > 0 {
+		leftover := make([]byte, n)
+		io.ReadFull(br, leftover)
+		conn = &connWithBuffered{Conn: conn, reader: io.MultiReader(bytes.NewReader(leftover), conn)}
+	}
+	return conn, nil
+}
+
+type connWithBuffered struct {
+	net.Conn
+	reader io.Reader
+}
+
+func (c *connWithBuffered) Read(p []byte) (n int, err error) {
+	return c.reader.Read(p)
+}
+
+func transfer(destination io.WriteCloser, source io.ReadCloser) {
+	defer destination.Close()
+	defer source.Close()
+	io.Copy(destination, source)
+}
+
+func maskProxyURL(u string) string {
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return "***"
+	}
+	if parsed.User != nil {
+		parsed.User = url.UserPassword("***", "***")
+	}
+	return parsed.String()
 }

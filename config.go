@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"net/url"
 	"os"
 	"time"
 
@@ -8,12 +10,16 @@ import (
 )
 
 type Config struct {
-	TargetURL         string     `yaml:"target_url"`
-	Proxy             ProxyConfig `yaml:"proxy"`
-	RequestTimeout    string     `yaml:"request_timeout"`
-	ConcurrentWorkers int        `yaml:"concurrent_workers"`
-	CheckInterval     string     `yaml:"check_interval"`
-	HTTPSPort         string     `yaml:"https_port"`
+	TargetURL           string      `yaml:"target_url"`
+	Proxy               ProxyConfig `yaml:"proxy"`
+	RequestTimeout      string      `yaml:"request_timeout"`
+	ConcurrentWorkers   int         `yaml:"concurrent_workers"`
+	CheckInterval       string      `yaml:"check_interval"`
+	HTTPSPort           string      `yaml:"https_port"`
+	ForwardProxyEnabled    bool   `yaml:"forward_proxy_enabled"`
+	ForwardProxyPort       string `yaml:"forward_proxy_port"`
+	UpstreamProxyURL       string `yaml:"upstream_proxy_url"`
+	UpstreamProxyInsecure  bool   `yaml:"upstream_proxy_insecure"`
 }
 
 type ProxyConfig struct {
@@ -62,6 +68,14 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if c.HTTPSPort == "" {
 		c.HTTPSPort = ":443"
+	}
+	if c.ForwardProxyPort == "" {
+		c.ForwardProxyPort = ":8443"
+	}
+	// Build upstream proxy URL from proxy config if not explicitly set
+	if c.ForwardProxyEnabled && c.UpstreamProxyURL == "" && c.Proxy.Host != "" {
+		userInfo := url.UserPassword(c.Proxy.Username, c.Proxy.Password)
+		c.UpstreamProxyURL = fmt.Sprintf("http://%s@%s:%s", userInfo.String(), c.Proxy.Host, c.Proxy.Port)
 	}
 
 	requestTimeout, err := time.ParseDuration(c.RequestTimeout)

@@ -17,6 +17,10 @@ Edit `config.yaml` to customize:
 | `concurrent_workers` | Parallel workers | `50` |
 | `check_interval` | How often to run check (e.g. `1h`, `30m`) | `1h` |
 | `https_port` | API listen address | `:443` |
+| `forward_proxy_enabled` | Enable HTTP forward proxy | `false` |
+| `forward_proxy_port` | Port for forward proxy | `:8443` |
+| `upstream_proxy_url` | Upstream HTTP proxy (e.g. `http://user:pass@host:port`) | Uses `proxy` config if empty |
+| `upstream_proxy_insecure` | Skip TLS verification when connecting to `https://` upstream | `false` |
 
 Pass config path via `--config` / `-c` flag.
 
@@ -51,6 +55,27 @@ make run
 ```
 
 **Note:** Port 443 requires root/sudo on most systems. Config file path is required via `-c`/`--config`.
+
+### HTTP forward proxy
+
+When running in server mode, you can optionally enable an **HTTP forward proxy** (listens on :8443) that tunnels traffic through an upstream HTTP proxy. Clients connect via plain HTTP (e.g. `http://localhost:8443`) to reach websites via the upstream proxy.
+
+Configure in `config.yaml`:
+
+```yaml
+forward_proxy_enabled: true
+forward_proxy_port: ":8443"
+upstream_proxy_url: "http://user:pass@proxy.example.com:80"
+upstream_proxy_insecure: false  # set true to skip TLS verify for https:// upstream
+```
+
+Or enable via `--forward-proxy` flag (other settings from config).
+
+The forward proxy listens on `:8443` by default. Example with curl:
+
+```bash
+curl -x http://localhost:8443 https://example.com
+```
 
 ## Makefile
 
