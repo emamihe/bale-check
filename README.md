@@ -23,7 +23,7 @@ Pass config path via `--config` / `-c` flag.
 ## How it works
 
 - Uses HTTP proxies from `p.webshare.io:80`
-- Proxy username format: `ouwqkjxo-XX-rotate` (XX = 2-letter country code)
+- Proxy username format: `username-XX-rotate` (XX = 2-letter country code)
 - For each country code, sends a request through that country's proxy
 - **401 response** = country works (added to list)
 - **Timeout** = skips to next country
