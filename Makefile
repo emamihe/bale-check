@@ -8,7 +8,7 @@ build:
 	go build -o $(BINARY_NAME) .
 
 run: build
-	sudo ./$(BINARY_NAME)
+	sudo ./$(BINARY_NAME) --config config.yaml
 
 clean:
 	rm -f $(BINARY_NAME)

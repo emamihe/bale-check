@@ -18,7 +18,7 @@ Edit `config.yaml` to customize:
 | `check_interval` | How often to run check (e.g. `1h`, `30m`) | `1h` |
 | `https_port` | API listen address | `:443` |
 
-Override config path with `CONFIG_PATH` env var.
+Pass config path via `--config` / `-c` flag.
 
 ## How it works
 
@@ -45,12 +45,12 @@ Returns JSON:
 ## Usage
 
 ```bash
-make build && sudo ./bale-check
+./bale-check --config config.yaml
 # or
 make run
 ```
 
-**Note:** Port 443 requires root/sudo on most systems.
+**Note:** Port 443 requires root/sudo on most systems. Config file path is required via `-c`/`--config`.
 
 ## Makefile
 

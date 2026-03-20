@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/opt/bale-messenger-countries-check/bale-check
+ExecStart=/opt/bale-messenger-countries-check/bale-check --config /opt/bale-messenger-countries-check/config.yaml
 WorkingDirectory=/opt/bale-messenger-countries-check
 User=root
 

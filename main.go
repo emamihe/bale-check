@@ -12,11 +12,11 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
-	"os"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/spf13/cobra"
 )
 
 type safeLogger struct {
@@ -54,15 +54,28 @@ var countryCodes = []string{
 }
 
 func main() {
-	configPath := "config.yaml"
-	if p := os.Getenv("CONFIG_PATH"); p != "" {
-		configPath = p
+	var configPath string
+
+	rootCmd := &cobra.Command{
+		Use:   "bale-check",
+		Short: "Bale Messenger countries check - tests proxy connectivity and exposes results via HTTPS API",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if _, err := LoadConfig(configPath); err != nil {
+				return err
+			}
+			return runApp()
+		},
 	}
 
-	if _, err := LoadConfig(configPath); err != nil {
-		log.Fatalf("Failed to load config from %s: %v", configPath, err)
-	}
+	rootCmd.Flags().StringVarP(&configPath, "config", "c", "", "path to config file (required)")
+	rootCmd.MarkFlagRequired("config")
 
+	if err := rootCmd.Execute(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func runApp() error {
 	c := GetConfig()
 	p := GetParsedConfig()
 
@@ -89,9 +102,7 @@ func main() {
 	}
 
 	log.Printf("HTTPS server listening on %s\n", c.HTTPSPort)
-	if err := server.ListenAndServeTLS("", ""); err != nil {
-		log.Fatalf("Server failed: %v", err)
-	}
+	return server.ListenAndServeTLS("", "")
 }
 
 func runCheck() {
