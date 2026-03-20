@@ -1,0 +1,5 @@
+bale-check
+.git
+*.md
+Makefile
+bale-countries-check.service

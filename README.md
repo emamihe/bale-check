@@ -63,6 +63,18 @@ make run
 | `make uninstall` | Remove installation and disable service       |
 | `make help`    | Show all targets                               |
 
+## Docker
+
+```bash
+docker build -t bale-countries-check .
+docker run -p 443:443 bale-countries-check
+```
+
+To use a custom config, mount it:
+```bash
+docker run -p 443:443 -v /path/to/config.yaml:/app/config.yaml bale-countries-check
+```
+
 ## Systemd service
 
 ```bash
