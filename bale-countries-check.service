@@ -1,0 +1,20 @@
+[Unit]
+Description=Bale Messenger Countries Check - tests proxy connectivity and exposes results via HTTPS API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/bale-messenger-countries-check/bale-check
+WorkingDirectory=/opt/bale-messenger-countries-check
+User=root
+
+Restart=on-failure
+RestartSec=30
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bale-countries-check
+
+[Install]
+WantedBy=multi-user.target

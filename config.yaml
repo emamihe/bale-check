@@ -1,0 +1,12 @@
+target_url: "https://next-ws.bale.ai/bale.auth.v1.Auth/"
+
+proxy:
+  host: "p.webshare.io"
+  port: "80"
+  username: ""
+  password: ""
+
+request_timeout: "15s"
+concurrent_workers: 50
+check_interval: "1h"
+https_port: ":443"
