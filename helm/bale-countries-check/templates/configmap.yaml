@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "bale-countries-check.fullname" . }}
+  labels:
+    {{- include "bale-countries-check.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    target_url: {{ .Values.config.target_url | quote }}
+    proxy:
+      host: {{ .Values.config.proxy.host | quote }}
+      port: {{ .Values.config.proxy.port | quote }}
+      username: {{ .Values.config.proxy.username | quote }}
+      password: {{ .Values.config.proxy.password | quote }}
+    request_timeout: {{ .Values.config.request_timeout | quote }}
+    concurrent_workers: {{ .Values.config.concurrent_workers }}
+    check_interval: {{ .Values.config.check_interval | quote }}
+    https_port: {{ .Values.config.https_port | quote }}

@@ -1,0 +1,13 @@
+apiVersion: v2
+name: bale-countries-check
+description: Bale Messenger countries check - tests proxy connectivity and exposes results via HTTPS API
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - bale
+  - messenger
+  - proxy
+  - countries
+maintainers:
+  - name: Bale Countries Check

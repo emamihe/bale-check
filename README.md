@@ -63,6 +63,30 @@ make run
 | `make uninstall` | Remove installation and disable service       |
 | `make help`    | Show all targets                               |
 
+## Helm
+
+```bash
+helm install bale-countries-check ./helm/bale-countries-check \
+  --set image.repository=your-registry/bale-countries-check \
+  --set image.tag=latest \
+  --set config.proxy.username=your-username \
+  --set config.proxy.password=your-password
+```
+
+With Ingress enabled:
+```bash
+helm install bale-countries-check ./helm/bale-countries-check \
+  --set ingress.enabled=true \
+  --set ingress.hosts[0].host=countries.example.com \
+  --set ingress.tls[0].secretName=countries-tls \
+  --set ingress.tls[0].hosts[0]=countries.example.com
+```
+
+Or with a values file:
+```bash
+helm install bale-countries-check ./helm/bale-countries-check -f my-values.yaml
+```
+
 ## Docker
 
 ```bash
